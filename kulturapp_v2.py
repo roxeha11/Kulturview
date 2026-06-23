@@ -401,7 +401,7 @@ if st.session_state.page == "entdecken":
         if ki_query.strip() and API_VERFUEGBAR:
             with st.spinner("🤖 KI analysiert deine Suche..."):
                 alle = ki_smarte_suche(ki_query, alle)
-            st.info(f"🤖 KI-Suche: {len(alle)} Ergebnis(se) für „{ki_query}"")
+            st.info(f"🤖 KI-Suche: {len(alle)} Ergebnis(se) für '{ki_query}'")
         elif ki_query.strip():
             q = ki_query.lower()
             alle = [e for e in alle if q in e.get("titel","").lower()
