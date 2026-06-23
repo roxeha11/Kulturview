@@ -174,6 +174,8 @@ def get_user(bn):
 # ─────────────────────────────────────────────
 # DEMO-DATEN
 # ─────────────────────────────────────────────
+# Demo-Profile bleiben für Beispielinhalte (Posts/Marketplace/Chats) erhalten,
+# sind aber NICHT mehr als passwortfreie Logins freigeschaltet.
 DEMO_USERS = [
     dict(benutzername="anna_k",  name="Anna Köhler",   bio="Malerin aus Berlin 🎨",       rolle="user"),
     dict(benutzername="lukas_m", name="Lukas Meier",   bio="Fotograf & Vinyl-Fan",         rolle="user"),
@@ -247,6 +249,27 @@ for k, v in [
 apply_theme()
 
 # ─────────────────────────────────────────────
+# ADMIN-BOOTSTRAP (einmalig)
+# ─────────────────────────────────────────────
+# Erstellt beim ersten Start einen Admin-Account (admin / admin123),
+# falls noch kein Admin in kl_users.json existiert.
+try:
+    _users_boot = load_users()
+    if not any(u.get("benutzername")=="admin" for u in _users_boot):
+        _users_boot.append(dict(
+            benutzername="admin",
+            name="Admin",
+            bio="",
+            passwort=hash_pw("admin123"),
+            rolle="admin",
+            erstellt=datetime.now().strftime("%d.%m.%Y"),
+        ))
+        save_users(_users_boot)
+except Exception:
+    # Falls Dateien/Parsing noch nicht ready sind, Login läuft trotzdem.
+    pass
+
+# ─────────────────────────────────────────────
 # LOGIN
 # ─────────────────────────────────────────────
 if not st.session_state.logged_in:
@@ -270,18 +293,29 @@ if not st.session_state.logged_in:
                 pw  = st.text_input("Passwort", type="password")
                 btn = st.form_submit_button("Anmelden →", use_container_width=True)
             if btn:
-                if bn in ["anna_k","lukas_m","sofia_r","tim_b","admin"]:
-                    st.session_state.logged_in = True
-                    st.session_state.username  = bn; st.rerun()
                 users = load_users()
-                u = next((u for u in users
-                          if u["benutzername"]==bn and u["passwort"]==hash_pw(pw)), None)
-                if u:
-                    st.session_state.logged_in = True
-                    st.session_state.username  = bn; st.rerun()
+
+                # Admin-Login (immer mit Passwort)
+                if bn == "admin":
+                    u_admin = next((u for u in users
+                                    if u.get("benutzername") == "admin"
+                                    and u.get("passwort") == hash_pw(pw)
+                                    and u.get("rolle") == "admin"), None)
+                    if u_admin:
+                        st.session_state.logged_in = True
+                        st.session_state.username  = "admin"; st.rerun()
+                    else:
+                        st.error("Admin-Zugang: Benutzername oder Passwort falsch.")
+
+                # Normaler Login
                 else:
-                    st.error("Benutzername oder Passwort falsch.")
-            st.caption("💡 Demo: anna_k, lukas_m, sofia_r, tim_b (kein Passwort)")
+                    u = next((u for u in users
+                              if u.get("benutzername")==bn and u.get("passwort")==hash_pw(pw)), None)
+                    if u:
+                        st.session_state.logged_in = True
+                        st.session_state.username  = bn; st.rerun()
+                    else:
+                        st.error("Benutzername oder Passwort falsch.")
 
         with t2:
             with st.form("register"):
@@ -1038,13 +1072,14 @@ elif st.session_state.page == "marketplace":
                 fn = f"{uuid.uuid4()}.{sbild.name.split('.')[-1]}"
                 bp = save_media(sbild,"market",fn)
             market.append(dict(
-                id=str(uuid.uuid4()),verkäufer=st.session_state.username,
-                titel=st.strip(),beschreibung=beschr,kategorie=skat,
+                id=str(uuid.uuid4()),verkaeufer=st.session_state.username,
+                titel=sell_titel.strip(),beschreibung=beschr,kategorie=skat,
                 preis=sp,status="verfügbar",bild=bp,
                 datum=datetime.now().strftime("%d.%m.%Y")
             ))
             save_json(MARKET_FILE,market)
-            st.success(f"✅ '{st}' eingestellt!"); st.rerun()
+            st.success(f"✅ '{sell_titel.strip()}' eingestellt!")
+            st.rerun()
 
     with sub[3]:
         st.markdown("<div class='kl-section-title'>💬 Marketplace-Inbox</div>",
@@ -1090,11 +1125,27 @@ elif st.session_state.page in ["konto","admin"]:
         at1,at2 = st.tabs(["👥 Benutzer","📊 Statistiken"])
         with at1:
             import pandas as pd
-            all_acc = load_users() + [u for u in DEMO_USERS]
+            all_acc = load_users()
             st.dataframe(pd.DataFrame([dict(
-                Benutzername=u["benutzername"],
-                Name=u.get("name",""),Rolle=u.get("rolle","user")
+                Benutzername=u.get("benutzername",""),
+                Name=u.get("name",""),
+                Rolle=u.get("rolle","user")
             ) for u in all_acc]), use_container_width=True, hide_index=True)
+
+            st.markdown("---")
+            st.markdown("**Account löschen**")
+            del_user = st.selectbox(
+                "Benutzer auswählen",
+                options=[u.get("benutzername") for u in all_acc if u.get("benutzername") != "admin"],
+                index=None,
+                placeholder="Benutzername wählen..."
+            )
+            confirm = st.checkbox("Ja, ich will diesen Account endgültig löschen.")
+            if st.button("🗑️ Löschen", use_container_width=True, disabled=(not del_user or not confirm)):
+                users2 = [u for u in load_users() if u.get("benutzername") != del_user]
+                save_users(users2)
+                st.success(f"✅ Account '{del_user}' gelöscht.")
+                st.rerun()
         with at2:
             posts  = load_json(POSTS_FILE,DEMO_POSTS)
             market = load_json(MARKET_FILE,DEMO_MARKET)
