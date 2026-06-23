@@ -938,7 +938,7 @@ elif st.session_state.page == "marketplace":
                     <div class='kl-muted'>{item['beschreibung'][:60]}...</div>
                     <div style='margin-top:8px;display:flex;justify-content:space-between'>
                         <span class='kl-price'>💶 {item['preis']} €</span>
-                        <span class='kl-muted'>@{item['verkaeufer']}</span>
+                        <span class='kl-muted'>@{item.get('verkaeufer', item.get('verkäufer',''))}</span>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -950,11 +950,11 @@ elif st.session_state.page == "marketplace":
                 if st.session_state.market_item == item["id"]:
                     with st.expander("📄 Details", expanded=True):
                         st.markdown(f"**{item['titel']}**\n\n{item['beschreibung']}")
-                        st.markdown(f"- 💶 {item['preis']} €  |  📂 {item['kategorie']}  |  👤 @{item['verkaeufer']}")
-                        if item["verkaeufer"] != st.session_state.username:
+                        st.markdown(f"- 💶 {item['preis']} €  |  📂 {item['kategorie']}  |  👤 @{item.get('verkaeufer', item.get('verkäufer',''))}")
+                        if item.get('verkaeufer', item.get('verkäufer','')) != st.session_state.username:
                             if st.button("💬 Verkäufer anschreiben",
                                           key=f"msg_{item['id']}"):
-                                ck = "__".join(sorted([st.session_state.username,item["verkaeufer"]]))
+                                ck = "__".join(sorted([st.session_state.username,item.get('verkaeufer', item.get('verkäufer',''))]))
                                 if ck not in chats: chats[ck]=[]
                                 chats[ck].append(dict(
                                     von=st.session_state.username,
@@ -997,14 +997,14 @@ elif st.session_state.page == "marketplace":
                     <b>{item['titel']}</b> <span class='kl-tag'>{item['kategorie']}</span><br>
                     <span class='kl-muted'>{item['beschreibung'][:80]}...</span><br>
                     <span class='kl-price'>💶 {item['preis']} €</span>
-                    <span class='kl-muted'> · @{item['verkaeufer']}</span>
+                    <span class='kl-muted'> · @{item.get('verkaeufer', item.get('verkäufer',''))}</span>
                 </div>
                 """, unsafe_allow_html=True)
 
     with sub[2]:
         st.markdown("<div class='kl-section-title'>📦 Verkaufen</div>",
                     unsafe_allow_html=True)
-        my_items=[i for i in market if i["verkaeufer"]==st.session_state.username]
+        my_items=[i for i in market if i.get('verkaeufer', i.get('verkäufer',''))==st.session_state.username]
         if my_items:
             st.markdown("**Meine Angebote:**")
             for item in my_items:
@@ -1145,7 +1145,7 @@ elif st.session_state.page in ["konto","admin"]:
         market = load_json(MARKET_FILE, DEMO_MARKET)
         c1,c2,c3 = st.columns(3)
         c1.metric("📝 Posts",   len([p for p in posts  if p["autor"]==st.session_state.username]))
-        c2.metric("🛍️ Artikel", len([m for m in market if m["verkaeufer"]==st.session_state.username]))
+        c2.metric("🛍️ Artikel", len([m for m in market if m.get('verkaeufer', m.get('verkäufer',''))==st.session_state.username]))
         c3.metric("⭐ Favoriten",len(load_json(FAVORITES_FILE,{}).get(st.session_state.username,[])))
 
     st.markdown("---")
