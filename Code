@@ -1,0 +1,1076 @@
+"""
+kultur· App v2 – Vollständige Streamlit-App
+Starten: streamlit run kulturapp_v2.py
+
+pip install streamlit pillow qrcode requests folium streamlit-folium
+"""
+
+import streamlit as st
+import json, os, uuid, hashlib, io
+from datetime import datetime, date
+from PIL import Image
+
+# ─────────────────────────────────────────────
+# KONFIGURATION
+# ─────────────────────────────────────────────
+st.set_page_config(page_title="kultur·", page_icon="🎨", layout="wide",
+                   initial_sidebar_state="collapsed")
+
+USERS_FILE    = "kl_users.json"
+EVENTS_FILE   = "kl_events.json"
+POSTS_FILE    = "kl_posts.json"
+CHATS_FILE    = "kl_chats.json"
+MARKET_FILE   = "kl_market.json"
+GROUPS_FILE   = "kl_groups.json"
+FAVORITES_FILE= "kl_favorites.json"
+MEDIA_DIR     = "kl_media"
+os.makedirs(MEDIA_DIR, exist_ok=True)
+os.makedirs(os.path.join(MEDIA_DIR, "profiles"), exist_ok=True)
+os.makedirs(os.path.join(MEDIA_DIR, "posts"), exist_ok=True)
+os.makedirs(os.path.join(MEDIA_DIR, "market"), exist_ok=True)
+
+# ─────────────────────────────────────────────
+# THEMING
+# ─────────────────────────────────────────────
+def apply_theme():
+    dark = st.session_state.get("dark_mode", False)
+    if dark:
+        bg, surface, card, text, muted, border, accent, accent2 = (
+            "#1a1a2e","#16213e","#0f3460","#e0e0e0","#a0a0a0",
+            "#2a2a4a","#e8a0bf","#c084fc"
+        )
+    else:
+        bg, surface, card, text, muted, border, accent, accent2 = (
+            "#fdf6f0","#fff8f4","#ffffff","#2d2d2d","#888888",
+            "#f0e4d7","#f4a7b9","#c084fc"
+        )
+    st.markdown(f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Quicksand:wght@400;500;600&display=swap');
+
+    html, body, .stApp {{ background-color: {bg}; color: {text}; font-family: 'Nunito', sans-serif; }}
+    section[data-testid="stSidebar"] {{ background: {surface}; }}
+    .stButton>button {{
+        background: linear-gradient(135deg, {accent}, {accent2}) !important;
+        color: white !important; border: none !important;
+        border-radius: 20px !important; font-weight: 700 !important;
+        font-family: 'Nunito', sans-serif !important;
+        padding: 8px 20px !important;
+    }}
+    .stButton>button:hover {{ opacity: 0.88 !important; transform: translateY(-1px); }}
+    .stTextInput>div>input, .stTextArea>div>textarea, .stSelectbox>div>div {{
+        background: {card} !important; color: {text} !important;
+        border: 1.5px solid {border} !important; border-radius: 12px !important;
+        font-family: 'Nunito', sans-serif !important;
+    }}
+    .stTabs [data-baseweb="tab-list"] {{ background: {surface}; border-radius: 16px; padding: 4px; gap: 4px; }}
+    .stTabs [data-baseweb="tab"] {{
+        background: transparent; border-radius: 12px;
+        color: {muted}; font-weight: 600; font-family: 'Nunito', sans-serif;
+        padding: 8px 16px;
+    }}
+    .stTabs [aria-selected="true"] {{
+        background: linear-gradient(135deg, {accent}, {accent2}) !important;
+        color: white !important;
+    }}
+    .kl-card {{
+        background: {card}; border: 1.5px solid {border};
+        border-radius: 18px; padding: 16px; margin-bottom: 12px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        transition: transform 0.15s, box-shadow 0.15s;
+    }}
+    .kl-card:hover {{ transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.1); }}
+    .kl-tag {{
+        display: inline-block; padding: 3px 12px; border-radius: 999px;
+        font-size: 0.75rem; font-weight: 700; margin: 2px;
+        background: linear-gradient(135deg, {accent}33, {accent2}33);
+        color: {accent2}; border: 1px solid {accent}55;
+    }}
+    .kl-price {{
+        color: {accent2}; font-weight: 800; font-size: 1.05rem;
+    }}
+    .kl-muted {{ color: {muted}; font-size: 0.82rem; }}
+    .kl-avatar {{
+        width: 42px; height: 42px; border-radius: 50%;
+        background: linear-gradient(135deg, {accent}, {accent2});
+        display: inline-flex; align-items: center; justify-content: center;
+        color: white; font-weight: 800; font-size: 1rem;
+    }}
+    .kl-section-title {{
+        font-family: 'Nunito', sans-serif; font-size: 1.4rem;
+        font-weight: 800; color: {accent2}; margin-bottom: 16px;
+    }}
+    .msg-sent {{
+        background: linear-gradient(135deg, {accent}, {accent2});
+        color: white; border-radius: 18px 18px 4px 18px;
+        padding: 10px 16px; margin: 4px 0; max-width: 70%;
+        margin-left: auto; font-size: 0.9rem;
+    }}
+    .msg-recv {{
+        background: {card}; color: {text};
+        border: 1px solid {border};
+        border-radius: 18px 18px 18px 4px;
+        padding: 10px 16px; margin: 4px 0; max-width: 70%;
+        font-size: 0.9rem;
+    }}
+    .kl-post {{
+        background: {card}; border: 1.5px solid {border};
+        border-radius: 20px; padding: 18px; margin-bottom: 16px;
+    }}
+    .kl-nav-btn {{
+        background: {surface} !important;
+        color: {text} !important;
+        border: 1.5px solid {border} !important;
+        border-radius: 16px !important;
+    }}
+    div[data-testid="metric-container"] {{
+        background: {card}; border-radius: 14px; padding: 12px;
+        border: 1px solid {border};
+    }}
+    hr {{ border-color: {border} !important; }}
+    </style>
+    """, unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────
+# DATENHILFEN
+# ─────────────────────────────────────────────
+def load_json(f, d):
+    if os.path.exists(f):
+        with open(f, "r", encoding="utf-8") as fp: return json.load(fp)
+    return d
+
+def save_json(f, d):
+    with open(f, "w", encoding="utf-8") as fp: json.dump(d, fp, ensure_ascii=False, indent=2)
+
+def hash_pw(pw): return hashlib.sha256(pw.encode()).hexdigest()
+
+def load_users(): return load_json(USERS_FILE, [])
+def save_users(u): save_json(USERS_FILE, u)
+
+def get_user(bn):
+    return next((u for u in load_users() if u["benutzername"] == bn), None)
+
+def save_media(file, subfolder, name):
+    path = os.path.join(MEDIA_DIR, subfolder, name)
+    with open(path, "wb") as f: f.write(file.getbuffer())
+    return path
+
+def get_avatar_initial(name):
+    return name[0].upper() if name else "?"
+
+# ─────────────────────────────────────────────
+# SESSION STATE
+# ─────────────────────────────────────────────
+defaults = {
+    "logged_in": False, "username": "", "dark_mode": False,
+    "page": "entdecken", "chat_with": None, "market_item": None,
+    "detail_event": None,
+}
+for k, v in defaults.items():
+    if k not in st.session_state: st.session_state[k] = v
+
+apply_theme()
+
+# ─────────────────────────────────────────────
+# DEMO-DATEN
+# ─────────────────────────────────────────────
+DEMO_EVENTS = [
+    dict(id="e1", typ="Event", emoji="🎵", titel="Jazz im Hof", ort="Berlin, Mitte",
+         preis=12, kategorie="Konzert", altersgruppe="Alle", barrierefreiheit=True,
+         oeffnung="20:00", zeitaufwand=3, datum="28.06.2026", entfernung=1.2,
+         beschreibung="Entspannter Jazz-Abend im Innenhof der Galerie Nord. Live-Band, Bar geöffnet.",
+         bild="🎵"),
+    dict(id="e2", typ="Ausstellung", emoji="🖼️", titel="Nachtgalerie: Expressionismus",
+         ort="Hamburg, Altona", preis=8, kategorie="Kunst", altersgruppe="Ab 12",
+         barrierefreiheit=True, oeffnung="18:00", zeitaufwand=2, datum="30.06.2026",
+         entfernung=3.5, beschreibung="Führungen durch die expressionistische Sammlung bei Kerzenlicht.", bild="🖼️"),
+    dict(id="e3", typ="Ort", emoji="🏛️", titel="Hamburger Kunsthalle",
+         ort="Hamburg, Innenstadt", preis=0, kategorie="Museum", altersgruppe="Alle",
+         barrierefreiheit=True, oeffnung="10:00", zeitaufwand=4, datum="Täglich",
+         entfernung=2.1, beschreibung="Eines der größten Kunstmuseen Deutschlands mit Werken vom Mittelalter bis zur Gegenwart.", bild="🏛️"),
+    dict(id="e4", typ="Event", emoji="🎭", titel="Impro-Theater Festival",
+         ort="München, Schwabing", preis=18, kategorie="Theater", altersgruppe="Ab 16",
+         barrierefreiheit=False, oeffnung="19:00", zeitaufwand=3, datum="05.07.2026",
+         entfernung=5.8, beschreibung="3 Tage, 12 Gruppen – das größte Impro-Festival Bayerns.", bild="🎭"),
+    dict(id="e5", typ="Event", emoji="🎨", titel="Siebdruck-Workshop",
+         ort="Köln, Ehrenfeld", preis=35, kategorie="Workshop", altersgruppe="Ab 18",
+         barrierefreiheit=True, oeffnung="12:00", zeitaufwand=5, datum="12.07.2026",
+         entfernung=0.8, beschreibung="Lerne Siebdruck von Grund auf – inklusive Material und Kaffee.", bild="🎨"),
+    dict(id="e6", typ="Ort", emoji="🎵", titel="Berghain",
+         ort="Berlin, Friedrichshain", preis=20, kategorie="Club", altersgruppe="Ab 18",
+         barrierefreiheit=False, oeffnung="00:00", zeitaufwand=8, datum="Wochenende",
+         entfernung=4.3, beschreibung="Weltberühmter Techno-Club im ehemaligen Heizkraftwerk.", bild="🎵"),
+]
+
+DEMO_POSTS = [
+    dict(id="p1", autor="anna_k", text="Gestern bei der Nachtgalerie – absolut beeindruckend! 🎨",
+         bild=None, likes=["lukas_m","sofia_r"], kommentare=[
+             dict(autor="lukas_m", text="War auch da, so eine tolle Atmosphäre!", zeit="19:45"),
+             dict(autor="sofia_r", text="Die Beleuchtung war perfekt!", zeit="20:01"),
+         ], zeit="19:30", datum="22.06.2026", markiert_von=[]),
+    dict(id="p2", autor="lukas_m", text="Neuer Vinyl-Fund beim Flohmarkt heute 🎶 #vinyl #musik",
+         bild=None, likes=["anna_k"], kommentare=[], zeit="14:20", datum="23.06.2026", markiert_von=[]),
+    dict(id="p3", autor="tim_b", text="Hat jemand Tipps für gute Galerien in Köln? 🖼️",
+         bild=None, likes=[], kommentare=[
+             dict(autor="sofia_r", text="Unbedingt die Galerie Max Hetzler anschauen!", zeit="11:30"),
+         ], zeit="11:00", datum="23.06.2026", markiert_von=[]),
+]
+
+DEMO_MARKET = [
+    dict(id="m1", verkäufer="anna_k", titel='Acryl "Stadtfluss"', beschreibung="Großes Acrylgemälde auf Leinwand, 80x60cm, 2024. Fließende Stadtansicht in Blautönen.", kategorie="Gemälde", preis=480, status="verfügbar", bild=None, datum="20.06.2026"),
+    dict(id="m2", verkäufer="lukas_m", titel='Fotoserie "Stille"', beschreibung="5-teilige Analog-Fotoserie, je 30x20cm, gerahmt. Naturfotografie.", kategorie="Fotografie", preis=220, status="verfügbar", bild=None, datum="21.06.2026"),
+    dict(id="m3", verkäufer="sofia_r", titel='Skulptur "Welle"', beschreibung="Handgefertigte Keramikskulptur, ca. 25cm hoch. Unikat.", kategorie="Skulptur", preis=340, status="reserviert", bild=None, datum="19.06.2026"),
+    dict(id="m4", verkäufer="tim_b", titel='Digital Art Print "Neon City"', beschreibung="Hochwertiger Druck auf Alu-Dibond, 50x70cm. Limitierte Auflage 3/10.", kategorie="Digital Art", preis=90, status="verfügbar", bild=None, datum="22.06.2026"),
+]
+
+DEMO_CHATS = {
+    "anna_k__lukas_m": [
+        dict(von="lukas_m", text="Hey Anna, interessiert dich noch das Gemälde?", zeit="14:20"),
+        dict(von="anna_k",  text="Ja, sehr! Ist der Preis noch verhandelbar?",    zeit="14:35"),
+        dict(von="lukas_m", text="Für dich 420 € 🙂",                             zeit="14:37"),
+    ],
+}
+
+DEMO_USERS_EXTRA = [
+    dict(benutzername="anna_k",  name="Anna Köhler",  bio="Malerin aus Berlin 🎨", rolle="user"),
+    dict(benutzername="lukas_m", name="Lukas Meier",  bio="Fotograf & Vinyl-Fan",  rolle="user"),
+    dict(benutzername="sofia_r", name="Sofia Richter", bio="Keramikerin & Galeristin", rolle="user"),
+    dict(benutzername="tim_b",   name="Tim Braun",    bio="Digital Artist aus Köln",   rolle="user"),
+]
+
+# ─────────────────────────────────────────────
+# LOGIN / REGISTRIERUNG
+# ─────────────────────────────────────────────
+if not st.session_state.logged_in:
+    col_l, col_c, col_r = st.columns([1,2,1])
+    with col_c:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("""
+        <div style='text-align:center;margin-bottom:24px'>
+            <span style='font-size:3rem'>🎨</span><br>
+            <span style='font-size:2rem;font-weight:800;background:linear-gradient(135deg,#f4a7b9,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent'>kultur·</span><br>
+            <span style='color:#888;font-size:0.95rem'>Deine Kulturplattform</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        t1, t2 = st.tabs(["🔐 Anmelden", "✨ Registrieren"])
+
+        with t1:
+            with st.form("login"):
+                bn  = st.text_input("Benutzername")
+                pw  = st.text_input("Passwort", type="password")
+                btn = st.form_submit_button("Anmelden →", use_container_width=True)
+            if btn:
+                users = load_users()
+                # Demo-Login ohne Passwort
+                if bn in ["anna_k","lukas_m","sofia_r","tim_b","admin"]:
+                    st.session_state.logged_in = True
+                    st.session_state.username  = bn
+                    st.rerun()
+                u = next((u for u in users if u["benutzername"]==bn and u["passwort"]==hash_pw(pw)), None)
+                if u:
+                    st.session_state.logged_in = True
+                    st.session_state.username  = bn
+                    st.rerun()
+                else:
+                    st.error("Benutzername oder Passwort falsch.")
+            st.caption("💡 Demo-Accounts: anna_k, lukas_m, sofia_r, tim_b (kein Passwort nötig)")
+
+        with t2:
+            with st.form("register"):
+                r_name = st.text_input("Vollständiger Name")
+                r_bn   = st.text_input("Benutzername")
+                r_bio  = st.text_input("Kurze Bio (optional)")
+                r_pw1  = st.text_input("Passwort", type="password")
+                r_pw2  = st.text_input("Passwort wiederholen", type="password")
+                r_btn  = st.form_submit_button("Account erstellen ✨", use_container_width=True)
+            if r_btn:
+                users = load_users()
+                if not r_name or not r_bn or not r_pw1:
+                    st.error("Bitte alle Pflichtfelder ausfüllen.")
+                elif r_pw1 != r_pw2:
+                    st.error("Passwörter stimmen nicht überein.")
+                elif len(r_pw1) < 6:
+                    st.error("Passwort muss mindestens 6 Zeichen haben.")
+                elif any(u["benutzername"]==r_bn for u in users):
+                    st.warning("Benutzername bereits vergeben.")
+                else:
+                    users.append(dict(benutzername=r_bn, name=r_name, bio=r_bio,
+                                      passwort=hash_pw(r_pw1), rolle="user",
+                                      erstellt=datetime.now().strftime("%d.%m.%Y")))
+                    save_users(users)
+                    st.session_state.logged_in = True
+                    st.session_state.username  = r_bn
+                    st.rerun()
+    st.stop()
+
+# ─────────────────────────────────────────────
+# NAVIGATION (HAUPTREITER)
+# ─────────────────────────────────────────────
+me = get_user(st.session_state.username)
+if me is None:
+    # Demo-User
+    me = next((u for u in DEMO_USERS_EXTRA if u["benutzername"]==st.session_state.username),
+              dict(benutzername=st.session_state.username, name=st.session_state.username,
+                   bio="", rolle="user"))
+
+is_admin = me.get("rolle","user") == "admin" or st.session_state.username == "admin"
+
+# Top-Leiste
+top_l, top_m, top_r = st.columns([1, 4, 1])
+with top_l:
+    st.markdown(f"""
+    <span style='font-size:1.4rem;font-weight:800;background:linear-gradient(135deg,#f4a7b9,#c084fc);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent'>kultur·</span>
+    """, unsafe_allow_html=True)
+with top_r:
+    dm_label = "☀️" if st.session_state.dark_mode else "🌙"
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button(dm_label, key="toggle_dark"):
+            st.session_state.dark_mode = not st.session_state.dark_mode
+            st.rerun()
+    with c2:
+        st.markdown(f"<div class='kl-avatar'>{get_avatar_initial(me.get('name','?'))}</div>",
+                    unsafe_allow_html=True)
+
+st.markdown("<hr style='margin:4px 0 12px'>", unsafe_allow_html=True)
+
+# Haupt-Navigation
+nav_items = ["🔍 Entdecken", "🌍 Community", "💬 Chats", "🛍️ Marketplace",
+             "⚙️ Admin" if is_admin else "👤 Konto"]
+nav_cols = st.columns(len(nav_items))
+for i, (col, item) in enumerate(zip(nav_cols, nav_items)):
+    with col:
+        key_name = item.split()[-1].lower()
+        is_active = st.session_state.page == key_name
+        style = "" if is_active else "kl-nav-btn"
+        if st.button(item, key=f"nav_{i}", use_container_width=True):
+            st.session_state.page = key_name
+            st.rerun()
+
+st.markdown("<hr style='margin:12px 0'>", unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════
+# SEITE: ENTDECKEN
+# ═══════════════════════════════════════════════════════════
+if st.session_state.page == "entdecken":
+    favorites = load_json(FAVORITES_FILE, {})
+    user_favs = favorites.get(st.session_state.username, [])
+
+    sub = st.tabs(["🗺️ Kulturfinder", "📅 Organisation", "🗺️ Karte"])
+
+    # ── KULTURFINDER ────────────────────────────────────────
+    with sub[0]:
+        st.markdown("<div class='kl-section-title'>🗺️ Kulturfinder</div>", unsafe_allow_html=True)
+
+        with st.expander("🔍 Filter", expanded=True):
+            fc1, fc2, fc3, fc4 = st.columns(4)
+            with fc1:
+                f_typ = st.multiselect("Typ", ["Event","Ausstellung","Ort"], default=["Event","Ausstellung","Ort"])
+                f_kat = st.selectbox("Kategorie", ["Alle","Konzert","Kunst","Museum","Theater","Workshop","Club"])
+            with fc2:
+                f_preis_max = st.slider("Max. Preis (€)", 0, 100, 100)
+                f_alter = st.selectbox("Altersgruppe", ["Alle","Alle","Ab 12","Ab 16","Ab 18"])
+            with fc3:
+                f_barrier = st.checkbox("Nur barrierefrei")
+                f_gruppe = st.number_input("Gruppengröße", 1, 20, 1)
+            with fc4:
+                f_zeitraum = st.text_input("Zeitraum (z.B. Juli 2026)")
+                f_aufwand  = st.slider("Max. Zeitaufwand (h)", 1, 12, 12)
+
+        events = DEMO_EVENTS.copy()
+        if f_typ: events = [e for e in events if e["typ"] in f_typ]
+        if f_kat != "Alle": events = [e for e in events if e["kategorie"]==f_kat]
+        events = [e for e in events if e["preis"] <= f_preis_max]
+        events = [e for e in events if e["zeitaufwand"] <= f_aufwand]
+        if f_barrier: events = [e for e in events if e["barrierefreiheit"]]
+
+        st.markdown(f"**{len(events)} Ergebnisse gefunden**")
+        st.markdown("---")
+
+        # KI-Empfehlung Banner
+        st.markdown("""
+        <div class='kl-card' style='border-left: 4px solid #c084fc'>
+            <b>✨ KI-Empfehlung für dich</b><br>
+            <span class='kl-muted'>Basierend auf deinen Interessen: Jazz, Ausstellungen, Berlin</span><br>
+            <span style='color:#c084fc'>→ Jazz im Hof passt perfekt zu deinem Profil!</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Events als Kacheln
+        cols = st.columns(3)
+        for i, ev in enumerate(events):
+            with cols[i % 3]:
+                is_fav = ev["id"] in user_favs
+                fav_icon = "⭐" if is_fav else "☆"
+                barrier_icon = "♿" if ev["barrierefreiheit"] else ""
+
+                st.markdown(f"""
+                <div class='kl-card'>
+                    <div style='font-size:2.5rem;text-align:center;margin-bottom:8px'>{ev['bild']}</div>
+                    <span class='kl-tag'>{ev['typ']}</span>
+                    <span class='kl-tag'>{ev['kategorie']}</span>
+                    {f"<span class='kl-tag'>♿</span>" if ev['barrierefreiheit'] else ""}
+                    <h4 style='margin:8px 0 4px'>{ev['titel']}</h4>
+                    <div class='kl-muted'>📍 {ev['ort']} · {ev['entfernung']} km entfernt</div>
+                    <div class='kl-muted'>🕐 {ev['oeffnung']} · ⏱️ ca. {ev['zeitaufwand']}h · 📅 {ev['datum']}</div>
+                    <div style='margin-top:8px'>
+                        <span class='kl-price'>{"Kostenlos" if ev['preis']==0 else f"{ev['preis']} €"}</span>
+                        &nbsp;<span class='kl-muted'>· 👥 Ab 1 Person</span>
+                    </div>
+                    <div class='kl-muted' style='margin-top:8px;font-size:0.8rem'>{ev['beschreibung'][:80]}...</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button(f"{fav_icon} Favorit", key=f"fav_{ev['id']}_{i}",
+                                  use_container_width=True):
+                        if ev["id"] in user_favs: user_favs.remove(ev["id"])
+                        else: user_favs.append(ev["id"])
+                        favorites[st.session_state.username] = user_favs
+                        save_json(FAVORITES_FILE, favorites)
+                        st.rerun()
+                with c2:
+                    if st.button("Details →", key=f"det_{ev['id']}_{i}",
+                                  use_container_width=True):
+                        st.session_state.detail_event = ev["id"]
+
+                if st.session_state.detail_event == ev["id"]:
+                    with st.expander(f"📄 {ev['titel']} – Details", expanded=True):
+                        st.markdown(f"**{ev['beschreibung']}**")
+                        st.markdown(f"- 📍 Ort: {ev['ort']}")
+                        st.markdown(f"- 💶 Preis: {ev['preis']} €")
+                        st.markdown(f"- 📅 Datum: {ev['datum']}")
+                        st.markdown(f"- ⏱️ Zeitaufwand: ca. {ev['zeitaufwand']}h")
+                        st.markdown(f"- ♿ Barrierefrei: {'Ja' if ev['barrierefreiheit'] else 'Nein'}")
+                        st.markdown(f"- 👥 Altersgruppe: {ev['altersgruppe']}")
+
+                        # Gruppenrabatt
+                        if f_gruppe >= 5:
+                            st.markdown(f"🎉 **Gruppenrabatt (5+):** {ev['preis']*0.85*f_gruppe:.2f} € gesamt (15% Rabatt)")
+                        elif f_gruppe >= 3:
+                            st.markdown(f"🎉 **Gruppenrabatt (3+):** {ev['preis']*0.9*f_gruppe:.2f} € gesamt (10% Rabatt)")
+                        else:
+                            st.markdown(f"💶 **Gesamt:** {ev['preis']*f_gruppe:.2f} € für {f_gruppe} Person(en)")
+
+                        if st.button("✓ Für Event anmelden", key=f"anm_{ev['id']}"):
+                            st.success(f"✅ Anmeldung für **{ev['titel']}** erfolgreich!")
+                        if st.button("✖ Schließen", key=f"close_{ev['id']}"):
+                            st.session_state.detail_event = None
+                            st.rerun()
+
+    # ── ORGANISATION ────────────────────────────────────────
+    with sub[1]:
+        st.markdown("<div class='kl-section-title'>📅 Meine Planung</div>", unsafe_allow_html=True)
+
+        favorites = load_json(FAVORITES_FILE, {})
+        user_favs = favorites.get(st.session_state.username, [])
+        fav_events = [e for e in DEMO_EVENTS if e["id"] in user_favs]
+
+        if not fav_events:
+            st.info("⭐ Markiere zuerst Events als Favoriten im Kulturfinder!")
+        else:
+            col_org1, col_org2 = st.columns([1,2])
+            with col_org1:
+                plan_datum = st.date_input("📅 Plantag", value=date.today())
+                plan_start = st.time_input("🕐 Startuhrzeit", value=datetime.strptime("10:00","%H:%M").time())
+                plan_ort   = st.text_input("📍 Startort", value="Berlin Mitte")
+                if st.button("🔄 Zeitplan generieren", use_container_width=True):
+                    st.session_state.plan_generated = True
+
+            with col_org2:
+                if st.session_state.get("plan_generated"):
+                    st.markdown("**🗓️ Optimierter Tagesplan:**")
+                    sorted_evs = sorted(fav_events, key=lambda x: (x["entfernung"], x["zeitaufwand"]))
+                    current_h  = plan_start.hour
+                    for idx, ev in enumerate(sorted_evs):
+                        end_h = current_h + ev["zeitaufwand"]
+                        st.markdown(f"""
+                        <div class='kl-card'>
+                            <b>{idx+1}. {ev['bild']} {ev['titel']}</b><br>
+                            <span class='kl-muted'>🕐 {current_h:02d}:00 – {end_h:02d}:00 &nbsp;|&nbsp;
+                            📍 {ev['ort']} &nbsp;|&nbsp; 🚶 {ev['entfernung']} km &nbsp;|&nbsp;
+                            💶 {ev['preis']} €</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        current_h = end_h + 1
+                else:
+                    st.markdown("**⭐ Deine Favoriten:**")
+                    for ev in fav_events:
+                        st.markdown(f"""
+                        <div class='kl-card'>
+                            {ev['bild']} <b>{ev['titel']}</b> &nbsp;
+                            <span class='kl-muted'>📍 {ev['ort']} · ⏱️ {ev['zeitaufwand']}h · 💶 {ev['preis']} €</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+    # ── KARTE ────────────────────────────────────────────────
+    with sub[2]:
+        st.markdown("<div class='kl-section-title'>🗺️ Kulturkarte</div>", unsafe_allow_html=True)
+        favorites = load_json(FAVORITES_FILE, {})
+        user_favs = favorites.get(st.session_state.username, [])
+
+        try:
+            import folium
+            from streamlit_folium import st_folium
+            m = folium.Map(location=[52.52, 13.405], zoom_start=12)
+            coords = {
+                "e1": [52.528, 13.381], "e2": [53.550, 9.984],
+                "e3": [53.565, 10.001], "e4": [48.162, 11.579],
+                "e5": [50.944, 6.914],  "e6": [52.510, 13.441],
+            }
+            for ev in DEMO_EVENTS:
+                c = coords.get(ev["id"], [52.52, 13.405])
+                icon_color = "gold" if ev["id"] in user_favs else "blue"
+                icon_sym   = "star"  if ev["id"] in user_favs else "info-sign"
+                folium.Marker(
+                    c, popup=f"<b>{ev['titel']}</b><br>{ev['ort']}<br>{ev['preis']}€",
+                    tooltip=ev["titel"],
+                    icon=folium.Icon(color=icon_color, icon=icon_sym)
+                ).add_to(m)
+            st_folium(m, width=None, height=450)
+        except ImportError:
+            st.info("🗺️ Für die interaktive Karte: `pip install folium streamlit-folium`")
+            st.markdown("**Alle Aktivitäten auf der Karte:**")
+            for ev in DEMO_EVENTS:
+                fav_mark = "⭐" if ev["id"] in user_favs else "📍"
+                st.markdown(f"{fav_mark} **{ev['titel']}** – {ev['ort']} ({ev['entfernung']} km)")
+
+# ═══════════════════════════════════════════════════════════
+# SEITE: COMMUNITY
+# ═══════════════════════════════════════════════════════════
+elif st.session_state.page == "community":
+    posts = load_json(POSTS_FILE, DEMO_POSTS)
+
+    sub = st.tabs(["✨ Für dich", "🔖 Markiert"])
+
+    for tab_idx, tab in enumerate(sub):
+        with tab:
+            if tab_idx == 0:
+                display_posts = posts
+                st.markdown("<div class='kl-section-title'>✨ Für dich</div>", unsafe_allow_html=True)
+            else:
+                display_posts = [p for p in posts if st.session_state.username in p.get("markiert_von",[])]
+                st.markdown("<div class='kl-section-title'>🔖 Markierte Beiträge</div>", unsafe_allow_html=True)
+                if not display_posts:
+                    st.info("Noch keine markierten Beiträge.")
+
+            # Neuer Post
+            if tab_idx == 0:
+                with st.expander("➕ Neuen Beitrag erstellen"):
+                    with st.form("new_post"):
+                        p_text  = st.text_area("Was möchtest du teilen?", placeholder="Schreib etwas über Kunst, Kultur, Events...")
+                        p_bild  = st.file_uploader("📸 Bild hinzufügen (optional)", type=["jpg","jpeg","png"])
+                        p_btn   = st.form_submit_button("Veröffentlichen ✨", use_container_width=True)
+                    if p_btn and p_text.strip():
+                        bild_path = None
+                        if p_bild:
+                            fname = f"{uuid.uuid4()}.{p_bild.name.split('.')[-1]}"
+                            bild_path = save_media(p_bild, "posts", fname)
+                        new_post = dict(
+                            id=str(uuid.uuid4()), autor=st.session_state.username,
+                            text=p_text.strip(), bild=bild_path,
+                            likes=[], kommentare=[], markiert_von=[],
+                            zeit=datetime.now().strftime("%H:%M"),
+                            datum=datetime.now().strftime("%d.%m.%Y")
+                        )
+                        posts.insert(0, new_post)
+                        save_json(POSTS_FILE, posts)
+                        st.success("✅ Beitrag veröffentlicht!")
+                        st.rerun()
+
+            # Posts anzeigen
+            for post in display_posts:
+                autor_info = next((u for u in DEMO_USERS_EXTRA if u["benutzername"]==post["autor"]),
+                                  dict(name=post["autor"], bio=""))
+                is_liked    = st.session_state.username in post.get("likes",[])
+                is_markiert = st.session_state.username in post.get("markiert_von",[])
+                is_own      = post["autor"] == st.session_state.username
+
+                with st.container():
+                    st.markdown(f"""
+                    <div class='kl-post'>
+                        <div style='display:flex;align-items:center;gap:10px;margin-bottom:12px'>
+                            <div class='kl-avatar'>{get_avatar_initial(autor_info['name'])}</div>
+                            <div>
+                                <b>{autor_info['name']}</b>
+                                <div class='kl-muted'>@{post['autor']} · {post['datum']} {post['zeit']}</div>
+                            </div>
+                        </div>
+                        <p style='margin:0 0 12px'>{post['text']}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    if post.get("bild") and os.path.exists(post["bild"]):
+                        st.image(post["bild"], use_container_width=True)
+
+                    act_cols = st.columns([1,1,1,1,3])
+                    with act_cols[0]:
+                        like_label = f"❤️ {len(post.get('likes',[]))}" if is_liked else f"🤍 {len(post.get('likes',[]))}"
+                        if st.button(like_label, key=f"like_{post['id']}_{tab_idx}"):
+                            for p in posts:
+                                if p["id"] == post["id"]:
+                                    if st.session_state.username in p["likes"]: p["likes"].remove(st.session_state.username)
+                                    else: p["likes"].append(st.session_state.username)
+                            save_json(POSTS_FILE, posts)
+                            st.rerun()
+                    with act_cols[1]:
+                        mark_label = "🔖" if is_markiert else "📌"
+                        if st.button(mark_label, key=f"mark_{post['id']}_{tab_idx}"):
+                            for p in posts:
+                                if p["id"] == post["id"]:
+                                    mv = p.setdefault("markiert_von",[])
+                                    if st.session_state.username in mv: mv.remove(st.session_state.username)
+                                    else: mv.append(st.session_state.username)
+                            save_json(POSTS_FILE, posts)
+                            st.rerun()
+                    with act_cols[2]:
+                        st.markdown(f"💬 {len(post.get('kommentare',[]))}")
+                    if is_own:
+                        with act_cols[3]:
+                            if st.button("🗑️", key=f"del_post_{post['id']}_{tab_idx}"):
+                                posts = [p for p in posts if p["id"] != post["id"]]
+                                save_json(POSTS_FILE, posts)
+                                st.rerun()
+
+                    # Kommentare
+                    with st.expander(f"💬 {len(post.get('kommentare',[]))} Kommentar(e)"):
+                        for k in post.get("kommentare",[]):
+                            k_info = next((u for u in DEMO_USERS_EXTRA if u["benutzername"]==k["autor"]),
+                                         dict(name=k["autor"]))
+                            st.markdown(f"""
+                            <div class='msg-recv' style='margin:4px 0'>
+                                <b>{k_info['name']}</b>: {k['text']}
+                                <div class='kl-muted'>{k['zeit']}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        with st.form(f"kom_{post['id']}_{tab_idx}"):
+                            k_text = st.text_input("Kommentar schreiben...", label_visibility="collapsed")
+                            k_btn  = st.form_submit_button("Senden")
+                        if k_btn and k_text.strip():
+                            for p in posts:
+                                if p["id"] == post["id"]:
+                                    p.setdefault("kommentare",[]).append(dict(
+                                        autor=st.session_state.username,
+                                        text=k_text.strip(),
+                                        zeit=datetime.now().strftime("%H:%M")
+                                    ))
+                            save_json(POSTS_FILE, posts)
+                            st.rerun()
+                st.markdown("---")
+
+# ═══════════════════════════════════════════════════════════
+# SEITE: CHATS
+# ═══════════════════════════════════════════════════════════
+elif st.session_state.page == "chats":
+    chats  = load_json(CHATS_FILE, DEMO_CHATS)
+    groups = load_json(GROUPS_FILE, [])
+
+    sub = st.tabs(["💬 Chats", "👥 Gruppen"])
+
+    # ── PRIVAT-CHATS ────────────────────────────────────────
+    with sub[0]:
+        st.markdown("<div class='kl-section-title'>💬 Nachrichten</div>", unsafe_allow_html=True)
+
+        # Neuen Chat starten
+        with st.expander("➕ Neuen Chat starten"):
+            all_users = [u["benutzername"] for u in DEMO_USERS_EXTRA
+                         if u["benutzername"] != st.session_state.username]
+            new_chat_user = st.selectbox("Benutzer auswählen", all_users)
+            if st.button("Chat starten →"):
+                key = "__".join(sorted([st.session_state.username, new_chat_user]))
+                if key not in chats: chats[key] = []
+                save_json(CHATS_FILE, chats)
+                st.session_state.chat_with = new_chat_user
+                st.rerun()
+
+        # Meine Chats
+        my_chats = {k: v for k, v in chats.items() if st.session_state.username in k}
+        if not my_chats:
+            st.info("Noch keine Chats. Starte einen neuen Chat!")
+        else:
+            chat_l, chat_r = st.columns([1, 2])
+            with chat_l:
+                st.markdown("**Gespräche:**")
+                for key in my_chats:
+                    parts     = key.split("__")
+                    other     = next((p for p in parts if p != st.session_state.username), parts[0])
+                    other_inf = next((u for u in DEMO_USERS_EXTRA if u["benutzername"]==other),
+                                     dict(name=other))
+                    is_sel    = st.session_state.chat_with == other
+                    msgs      = my_chats[key]
+                    last_msg  = msgs[-1]["text"][:25]+"..." if msgs else "Noch keine Nachrichten"
+                    btn_style = "primary" if is_sel else "secondary"
+                    if st.button(f"👤 {other_inf['name']}\n{last_msg}", key=f"chatbtn_{key}",
+                                  use_container_width=True, type=btn_style):
+                        st.session_state.chat_with = other
+                        st.rerun()
+
+            with chat_r:
+                if st.session_state.chat_with:
+                    other     = st.session_state.chat_with
+                    other_inf = next((u for u in DEMO_USERS_EXTRA if u["benutzername"]==other),
+                                     dict(name=other))
+                    chat_key  = "__".join(sorted([st.session_state.username, other]))
+                    msgs      = chats.get(chat_key, [])
+
+                    st.markdown(f"**Chat mit {other_inf['name']}**")
+                    st.markdown("---")
+
+                    msg_container = st.container()
+                    with msg_container:
+                        for msg in msgs[-30:]:
+                            if msg["von"] == st.session_state.username:
+                                st.markdown(f'<div class="msg-sent">{msg["text"]}<div class="kl-muted" style="color:#ffffff99;font-size:0.7rem">{msg["zeit"]}</div></div>', unsafe_allow_html=True)
+                            else:
+                                st.markdown(f'<div class="msg-recv">{msg["text"]}<div class="kl-muted" style="font-size:0.7rem">{msg["zeit"]}</div></div>', unsafe_allow_html=True)
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    with st.form(f"chat_form_{chat_key}", clear_on_submit=True):
+                        c1, c2 = st.columns([5,1])
+                        with c1: new_msg = st.text_input("Nachricht...", label_visibility="collapsed")
+                        with c2: send    = st.form_submit_button("↑")
+                    if send and new_msg.strip():
+                        if chat_key not in chats: chats[chat_key] = []
+                        chats[chat_key].append(dict(
+                            von=st.session_state.username, text=new_msg.strip(),
+                            zeit=datetime.now().strftime("%H:%M")
+                        ))
+                        save_json(CHATS_FILE, chats)
+                        st.rerun()
+
+    # ── GRUPPEN ─────────────────────────────────────────────
+    with sub[1]:
+        st.markdown("<div class='kl-section-title'>👥 Gruppen</div>", unsafe_allow_html=True)
+
+        with st.expander("➕ Neue Gruppe erstellen"):
+            with st.form("new_group"):
+                g_name = st.text_input("Gruppenname")
+                g_desc = st.text_input("Beschreibung")
+                g_btn  = st.form_submit_button("Gruppe erstellen")
+            if g_btn and g_name.strip():
+                groups.append(dict(
+                    id=str(uuid.uuid4()), name=g_name.strip(), beschreibung=g_desc,
+                    erstellt_von=st.session_state.username,
+                    mitglieder=[st.session_state.username],
+                    nachrichten=[], erstellt=datetime.now().strftime("%d.%m.%Y")
+                ))
+                save_json(GROUPS_FILE, groups)
+                st.success(f"Gruppe '{g_name}' erstellt!")
+                st.rerun()
+
+        my_groups = [g for g in groups if st.session_state.username in g.get("mitglieder",[])]
+        if not my_groups:
+            st.info("Du bist noch in keiner Gruppe.")
+        else:
+            for g in my_groups:
+                with st.expander(f"👥 {g['name']} ({len(g['mitglieder'])} Mitglieder)"):
+                    st.caption(g.get("beschreibung",""))
+                    for msg in g.get("nachrichten",[])[-20:]:
+                        if msg["von"] == st.session_state.username:
+                            st.markdown(f'<div class="msg-sent">{msg["text"]}</div>', unsafe_allow_html=True)
+                        else:
+                            st.markdown(f'<div class="msg-recv"><b>{msg["von"]}</b>: {msg["text"]}</div>', unsafe_allow_html=True)
+                    with st.form(f"grp_{g['id']}", clear_on_submit=True):
+                        gc1, gc2 = st.columns([5,1])
+                        with gc1: gm = st.text_input("Nachricht...", label_visibility="collapsed")
+                        with gc2: gs = st.form_submit_button("↑")
+                    if gs and gm.strip():
+                        for grp in groups:
+                            if grp["id"] == g["id"]:
+                                grp.setdefault("nachrichten",[]).append(dict(
+                                    von=st.session_state.username, text=gm.strip(),
+                                    zeit=datetime.now().strftime("%H:%M")
+                                ))
+                        save_json(GROUPS_FILE, groups)
+                        st.rerun()
+                    if g["erstellt_von"] == st.session_state.username:
+                        if st.button("🗑️ Gruppe löschen", key=f"del_grp_{g['id']}"):
+                            groups = [grp for grp in groups if grp["id"] != g["id"]]
+                            save_json(GROUPS_FILE, groups)
+                            st.rerun()
+
+# ═══════════════════════════════════════════════════════════
+# SEITE: MARKETPLACE
+# ═══════════════════════════════════════════════════════════
+elif st.session_state.page == "marketplace":
+    market = load_json(MARKET_FILE, DEMO_MARKET)
+    chats  = load_json(CHATS_FILE, DEMO_CHATS)
+
+    sub = st.tabs(["🏠 Home", "🔍 Suche", "📦 Verkaufen", "💬 Inbox"])
+
+    # ── HOME ────────────────────────────────────────────────
+    with sub[0]:
+        st.markdown("<div class='kl-section-title'>🛍️ Kunstmarktplatz</div>", unsafe_allow_html=True)
+
+        fk1, fk2 = st.columns(2)
+        with fk1:
+            m_kat = st.selectbox("Kategorie", ["Alle","Gemälde","Fotografie","Skulptur","Digital Art","Textil"])
+        with fk2:
+            m_preis = st.slider("Max. Preis (€)", 0, 2000, 2000, step=10)
+
+        items = [i for i in market if i["status"] != "gelöscht"]
+        if m_kat != "Alle": items = [i for i in items if i["kategorie"] == m_kat]
+        items = [i for i in items if i["preis"] <= m_preis]
+
+        cols = st.columns(2)
+        for idx, item in enumerate(items):
+            with cols[idx % 2]:
+                status_color = {"verfügbar":"#22c55e","reserviert":"#f59e0b","verkauft":"#ef4444"}.get(item["status"],"#888")
+                st.markdown(f"""
+                <div class='kl-card'>
+                    <div style='font-size:3rem;text-align:center;background:linear-gradient(135deg,#f4a7b933,#c084fc33);
+                    border-radius:12px;padding:16px;margin-bottom:12px'>🖼️</div>
+                    <span class='kl-tag'>{item['kategorie']}</span>
+                    <span style='background:{status_color}22;color:{status_color};padding:2px 10px;
+                    border-radius:999px;font-size:0.72rem;font-weight:700;border:1px solid {status_color}55'>{item['status'].upper()}</span>
+                    <h4 style='margin:8px 0 4px'>{item['titel']}</h4>
+                    <div class='kl-muted'>{item['beschreibung'][:60]}...</div>
+                    <div style='margin-top:8px;display:flex;justify-content:space-between;align-items:center'>
+                        <span class='kl-price'>💶 {item['preis']} €</span>
+                        <span class='kl-muted'>von @{item['verkäufer']}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                if st.button("Details / Anfragen", key=f"mdet_{item['id']}_{idx}",
+                              use_container_width=True):
+                    st.session_state.market_item = item["id"]
+
+                if st.session_state.market_item == item["id"]:
+                    with st.expander("📄 Artikeldetails", expanded=True):
+                        st.markdown(f"**{item['titel']}**")
+                        st.markdown(item["beschreibung"])
+                        st.markdown(f"- 💶 Preis: **{item['preis']} €**")
+                        st.markdown(f"- 📂 Kategorie: {item['kategorie']}")
+                        st.markdown(f"- 👤 Verkäufer: @{item['verkäufer']}")
+                        st.markdown(f"- 📅 Eingestellt: {item['datum']}")
+
+                        if item["verkäufer"] != st.session_state.username:
+                            if st.button("💬 Verkäufer anschreiben", key=f"msg_{item['id']}"):
+                                chat_key = "__".join(sorted([st.session_state.username, item["verkäufer"]]))
+                                if chat_key not in chats: chats[chat_key] = []
+                                chats[chat_key].append(dict(
+                                    von=st.session_state.username,
+                                    text=f"Hallo! Ich interessiere mich für '{item['titel']}'.",
+                                    zeit=datetime.now().strftime("%H:%M")
+                                ))
+                                save_json(CHATS_FILE, chats)
+                                st.success("Nachricht gesendet! Wechsle zu Chats.")
+                        else:
+                            st.markdown("**Status ändern:**")
+                            sc1, sc2, sc3 = st.columns(3)
+                            with sc1:
+                                if st.button("✅ Verfügbar", key=f"sv_{item['id']}"):
+                                    for m in market:
+                                        if m["id"]==item["id"]: m["status"]="verfügbar"
+                                    save_json(MARKET_FILE, market); st.rerun()
+                            with sc2:
+                                if st.button("⏳ Reserviert", key=f"sr_{item['id']}"):
+                                    for m in market:
+                                        if m["id"]==item["id"]: m["status"]="reserviert"
+                                    save_json(MARKET_FILE, market); st.rerun()
+                            with sc3:
+                                if st.button("🔴 Verkauft", key=f"sk_{item['id']}"):
+                                    for m in market:
+                                        if m["id"]==item["id"]: m["status"]="verkauft"
+                                    save_json(MARKET_FILE, market); st.rerun()
+                            if st.button("🗑️ Artikel löschen", key=f"sdel_{item['id']}"):
+                                market = [m for m in market if m["id"] != item["id"]]
+                                save_json(MARKET_FILE, market)
+                                st.session_state.market_item = None
+                                st.rerun()
+                        if st.button("✖ Schließen", key=f"mclose_{item['id']}"):
+                            st.session_state.market_item = None; st.rerun()
+
+    # ── SUCHE ───────────────────────────────────────────────
+    with sub[1]:
+        st.markdown("<div class='kl-section-title'>🔍 Suche</div>", unsafe_allow_html=True)
+        search_q = st.text_input("Was suchst du?", placeholder="z.B. Gemälde, Fotografie, Skulptur...")
+        if search_q:
+            market = load_json(MARKET_FILE, DEMO_MARKET)
+            results = [i for i in market if search_q.lower() in i["titel"].lower()
+                       or search_q.lower() in i["beschreibung"].lower()
+                       or search_q.lower() in i["kategorie"].lower()]
+            st.markdown(f"**{len(results)} Ergebnis(se)**")
+            for item in results:
+                st.markdown(f"""
+                <div class='kl-card'>
+                    <b>{item['titel']}</b> &nbsp; <span class='kl-tag'>{item['kategorie']}</span><br>
+                    <span class='kl-muted'>{item['beschreibung'][:80]}...</span><br>
+                    <span class='kl-price'>💶 {item['preis']} €</span>
+                    &nbsp;<span class='kl-muted'>von @{item['verkäufer']}</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+    # ── VERKAUFEN ───────────────────────────────────────────
+    with sub[2]:
+        st.markdown("<div class='kl-section-title'>📦 Artikel verkaufen</div>", unsafe_allow_html=True)
+
+        # Meine Artikel
+        market = load_json(MARKET_FILE, DEMO_MARKET)
+        my_items = [i for i in market if i["verkäufer"]==st.session_state.username]
+        if my_items:
+            st.markdown("**Meine Angebote:**")
+            for item in my_items:
+                st.markdown(f"""
+                <div class='kl-card'>
+                    <b>{item['titel']}</b> · <span class='kl-price'>{item['preis']} €</span>
+                    · Status: {item['status']}
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.markdown("**Neuen Artikel einstellen:**")
+        with st.form("sell_form"):
+            s1, s2 = st.columns(2)
+            with s1:
+                s_titel = st.text_input("Titel")
+                s_kat   = st.selectbox("Kategorie", ["Gemälde","Fotografie","Skulptur","Digital Art","Textil","Sonstiges"])
+                s_preis = st.number_input("Preis (€)", min_value=1, value=100)
+            with s2:
+                s_bild  = st.file_uploader("📸 Bild hochladen", type=["jpg","jpeg","png"])
+                s_desc  = st.text_area("Beschreibung")
+            s_btn = st.form_submit_button("📦 Einstellen", use_container_width=True)
+        if s_btn and s_titel.strip() and s_desc.strip():
+            bild_path = None
+            if s_bild:
+                fname = f"{uuid.uuid4()}.{s_bild.name.split('.')[-1]}"
+                bild_path = save_media(s_bild, "market", fname)
+            market.append(dict(
+                id=str(uuid.uuid4()), verkäufer=st.session_state.username,
+                titel=s_titel.strip(), beschreibung=s_desc.strip(),
+                kategorie=s_kat, preis=s_preis, status="verfügbar",
+                bild=bild_path, datum=datetime.now().strftime("%d.%m.%Y")
+            ))
+            save_json(MARKET_FILE, market)
+            st.success(f"✅ '{s_titel}' wurde eingestellt!")
+            st.rerun()
+
+    # ── INBOX ───────────────────────────────────────────────
+    with sub[3]:
+        st.markdown("<div class='kl-section-title'>💬 Marketplace-Inbox</div>", unsafe_allow_html=True)
+        chats = load_json(CHATS_FILE, DEMO_CHATS)
+        my_chats = {k: v for k, v in chats.items() if st.session_state.username in k}
+        if not my_chats:
+            st.info("Noch keine Marketplace-Nachrichten.")
+        else:
+            for key, msgs in my_chats.items():
+                parts = key.split("__")
+                other = next((p for p in parts if p != st.session_state.username), parts[0])
+                other_inf = next((u for u in DEMO_USERS_EXTRA if u["benutzername"]==other), dict(name=other))
+                with st.expander(f"💬 {other_inf['name']}"):
+                    for msg in msgs[-10:]:
+                        if msg["von"] == st.session_state.username:
+                            st.markdown(f'<div class="msg-sent">{msg["text"]}</div>', unsafe_allow_html=True)
+                        else:
+                            st.markdown(f'<div class="msg-recv">{msg["text"]}</div>', unsafe_allow_html=True)
+                    with st.form(f"inbox_{key}", clear_on_submit=True):
+                        ic1, ic2 = st.columns([5,1])
+                        with ic1: im = st.text_input("Antworten...", label_visibility="collapsed")
+                        with ic2: isend = st.form_submit_button("↑")
+                    if isend and im.strip():
+                        chats[key].append(dict(von=st.session_state.username, text=im.strip(), zeit=datetime.now().strftime("%H:%M")))
+                        save_json(CHATS_FILE, chats); st.rerun()
+
+# ═══════════════════════════════════════════════════════════
+# SEITE: KONTO / ADMIN
+# ═══════════════════════════════════════════════════════════
+elif st.session_state.page in ["konto", "admin"]:
+    if is_admin and st.session_state.page == "admin":
+        st.markdown("<div class='kl-section-title'>⚙️ Administration</div>", unsafe_allow_html=True)
+        at1, at2, at3 = st.tabs(["👥 Benutzer", "📊 Statistiken", "🗂️ Daten"])
+
+        with at1:
+            users = load_users()
+            all_acc = users + [u for u in DEMO_USERS_EXTRA if u["benutzername"] not in [u2["benutzername"] for u2 in users]]
+            if all_acc:
+                import pandas as pd
+                df_u = pd.DataFrame([dict(
+                    Benutzername=u["benutzername"],
+                    Name=u.get("name",""),
+                    Rolle=u.get("rolle","user"),
+                    Erstellt=u.get("erstellt","Demo")
+                ) for u in all_acc])
+                st.dataframe(df_u, use_container_width=True, hide_index=True)
+
+        with at2:
+            posts  = load_json(POSTS_FILE, DEMO_POSTS)
+            market = load_json(MARKET_FILE, DEMO_MARKET)
+            chats  = load_json(CHATS_FILE, DEMO_CHATS)
+            m1,m2,m3,m4 = st.columns(4)
+            m1.metric("👥 Benutzer", len(load_users())+len(DEMO_USERS_EXTRA))
+            m2.metric("📝 Posts", len(posts))
+            m3.metric("🛍️ Artikel", len(market))
+            m4.metric("💬 Chat-Konv.", len(chats))
+
+        with at3:
+            st.markdown("**Datendateien:**")
+            for f in [USERS_FILE, EVENTS_FILE, POSTS_FILE, CHATS_FILE, MARKET_FILE, GROUPS_FILE, FAVORITES_FILE]:
+                exists = "✅" if os.path.exists(f) else "❌"
+                size   = f"{os.path.getsize(f)/1024:.1f} KB" if os.path.exists(f) else "–"
+                st.markdown(f"{exists} `{f}` – {size}")
+
+    # KONTO
+    st.markdown("---")
+    st.markdown("<div class='kl-section-title'>👤 Mein Konto</div>", unsafe_allow_html=True)
+
+    users = load_users()
+    user_obj = next((u for u in users if u["benutzername"]==st.session_state.username), me)
+
+    k1, k2 = st.columns([1,2])
+    with k1:
+        prof_path = os.path.join(MEDIA_DIR, "profiles", f"{st.session_state.username}.jpg")
+        if os.path.exists(prof_path):
+            st.image(prof_path, width=120)
+        else:
+            st.markdown(f"""
+            <div style='width:100px;height:100px;border-radius:50%;
+            background:linear-gradient(135deg,#f4a7b9,#c084fc);
+            display:flex;align-items:center;justify-content:center;
+            color:white;font-size:2.5rem;font-weight:800'>
+            {get_avatar_initial(user_obj.get('name','?'))}</div>
+            """, unsafe_allow_html=True)
+        prof_upload = st.file_uploader("📸 Profilbild ändern", type=["jpg","jpeg","png"], key="prof_upload")
+        if prof_upload:
+            save_media(prof_upload, "profiles", f"{st.session_state.username}.jpg")
+            st.success("Profilbild gespeichert!")
+            st.rerun()
+
+    with k2:
+        with st.form("profile_form"):
+            p_name = st.text_input("Name", value=user_obj.get("name",""))
+            p_bio  = st.text_area("Bio", value=user_obj.get("bio",""), height=80)
+            p_save = st.form_submit_button("💾 Speichern", use_container_width=True)
+        if p_save:
+            for u in users:
+                if u["benutzername"] == st.session_state.username:
+                    u["name"] = p_name; u["bio"] = p_bio
+            save_users(users)
+            st.success("Profil aktualisiert!")
+
+        # Meine Posts & Artikel
+        posts  = load_json(POSTS_FILE, DEMO_POSTS)
+        market = load_json(MARKET_FILE, DEMO_MARKET)
+        my_posts   = [p for p in posts  if p["autor"]    == st.session_state.username]
+        my_market  = [m for m in market if m["verkäufer"] == st.session_state.username]
+        mc1, mc2 = st.columns(2)
+        mc1.metric("📝 Meine Posts",   len(my_posts))
+        mc2.metric("🛍️ Meine Artikel", len(my_market))
+
+    st.markdown("---")
+    col_dm, col_ab = st.columns(2)
+    with col_dm:
+        dm_label = "☀️ Hell-Modus" if st.session_state.dark_mode else "🌙 Dunkel-Modus"
+        if st.button(dm_label, use_container_width=True):
+            st.session_state.dark_mode = not st.session_state.dark_mode; st.rerun()
+    with col_ab:
+        if st.button("🚪 Abmelden", use_container_width=True):
+            for k in list(st.session_state.keys()): del st.session_state[k]
+            st.rerun()
+
+# Footer
+st.markdown("<br><hr>", unsafe_allow_html=True)
+st.markdown("<div style='text-align:center;color:#aaa;font-size:0.78rem'>kultur· · Deine Kulturplattform · v2.0</div>", unsafe_allow_html=True)
