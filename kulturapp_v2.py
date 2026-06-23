@@ -1,5 +1,5 @@
 """
-kultur· App v2 – mit API-Integration
+Kulturview App v2 – mit API-Integration
 Starten: streamlit run kulturapp_v2.py
 
 pip install streamlit pillow requests folium streamlit-folium
@@ -25,7 +25,7 @@ except ImportError:
 # ─────────────────────────────────────────────
 # KONFIGURATION
 # ─────────────────────────────────────────────
-st.set_page_config(page_title="kultur·", page_icon="🎨",
+st.set_page_config(page_title="Kulturview", page_icon="🎨",
                    layout="wide", initial_sidebar_state="collapsed")
 
 USERS_FILE    = "kl_users.json"
@@ -66,10 +66,50 @@ def apply_theme():
         font-weight:700!important;font-family:'Nunito',sans-serif!important;padding:8px 20px!important
     }}
     .stButton>button:hover{{opacity:.88!important;transform:translateY(-1px)}}
-    .stTextInput>div>input,.stTextArea>div>textarea,.stSelectbox>div>div{{
-        background:{card}!important;color:{text}!important;
-        border:1.5px solid {border}!important;border-radius:12px!important;
-        font-family:'Nunito',sans-serif!important
+    /* Force readable inputs in both modes */
+    .stTextInput > div > input,
+    .stTextArea > div > textarea,
+    .stNumberInput input,
+    .stDateInput input,
+    .stTimeInput input,
+    input[type="text"], input[type="password"], input[type="number"],
+    textarea {{
+        background-color: #ffffff !important;
+        color: #111111 !important;
+        caret-color: #111111 !important;
+        border: 1.5px solid {border} !important;
+        border-radius: 10px !important;
+        font-family: 'Nunito', sans-serif !important;
+    }}
+    input::placeholder, textarea::placeholder {{
+        color: #999999 !important;
+        opacity: 1 !important;
+    }}
+    .stSelectbox > div > div,
+    .stMultiSelect > div > div {{
+        background-color: #ffffff !important;
+        color: #111111 !important;
+    }}    }}
+    /* Placeholder-Text sichtbar */
+    input::placeholder, textarea::placeholder {{
+        color:#aaaaaa!important;
+    }}
+    /* Multiselect-Tags */
+    .stMultiSelect span[data-baseweb="tag"] {{
+        background:linear-gradient(135deg,{acc},{acc2})!important;
+        color:white!important;
+    }}
+    /* Expander-Kopf */
+    .streamlit-expanderHeader {{
+        background:{surface}!important;color:{text}!important;
+        border-radius:12px!important;font-weight:600!important;
+    }}
+    /* Slider-Label */
+    .stSlider label, .stCheckbox label, .stRadio label,
+    .stSelectbox label, .stTextInput label, .stTextArea label,
+    .stNumberInput label, .stMultiSelect label, .stDateInput label,
+    .stTimeInput label {{
+        color:{text}!important;font-weight:600!important;
     }}
     .stTabs [data-baseweb="tab-list"]{{background:{surface};border-radius:16px;padding:4px;gap:4px}}
     .stTabs [data-baseweb="tab"]{{background:transparent;border-radius:12px;color:{muted};
@@ -218,7 +258,7 @@ if not st.session_state.logged_in:
             <div style='font-size:2.2rem;font-weight:800;
             background:linear-gradient(135deg,#f4a7b9,#c084fc);
             -webkit-background-clip:text;-webkit-text-fill-color:transparent'>
-            kultur·</div>
+            Kulturview</div>
             <div style='color:#888;margin-top:4px'>Deine Kulturplattform</div>
         </div>
         """, unsafe_allow_html=True)
@@ -286,7 +326,7 @@ with tl:
     st.markdown("""<span style='font-size:1.4rem;font-weight:800;
     background:linear-gradient(135deg,#f4a7b9,#c084fc);
     -webkit-background-clip:text;-webkit-text-fill-color:transparent'>
-    kultur·</span>""", unsafe_allow_html=True)
+    Kulturview</span>""", unsafe_allow_html=True)
 with tr:
     c1,c2 = st.columns(2)
     with c1:
@@ -340,7 +380,7 @@ if st.session_state.page == "entdecken":
                 f_alter = st.selectbox("Altersgruppe",["Alle","Ab 12","Ab 16","Ab 18"])
             with fc4:
                 f_barrier  = st.checkbox("Nur barrierefrei ♿")
-                f_personen = st.number_input("Gruppengröße 👥", 1, 20, 1)
+                f_personen = st.number_input("Gruppengröße 👥", 1, 100, 1)
             with fc5:
                 f_aufwand  = st.slider("Max. Zeitaufwand (h)", 1, 12, 12)
                 f_zeitraum = st.text_input("Zeitraum", placeholder="z.B. Juli 2026")
@@ -898,7 +938,7 @@ elif st.session_state.page == "marketplace":
                     <div class='kl-muted'>{item['beschreibung'][:60]}...</div>
                     <div style='margin-top:8px;display:flex;justify-content:space-between'>
                         <span class='kl-price'>💶 {item['preis']} €</span>
-                        <span class='kl-muted'>@{item['verkäufer']}</span>
+                        <span class='kl-muted'>@{item['verkaeufer']}</span>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -910,11 +950,11 @@ elif st.session_state.page == "marketplace":
                 if st.session_state.market_item == item["id"]:
                     with st.expander("📄 Details", expanded=True):
                         st.markdown(f"**{item['titel']}**\n\n{item['beschreibung']}")
-                        st.markdown(f"- 💶 {item['preis']} €  |  📂 {item['kategorie']}  |  👤 @{item['verkäufer']}")
-                        if item["verkäufer"] != st.session_state.username:
+                        st.markdown(f"- 💶 {item['preis']} €  |  📂 {item['kategorie']}  |  👤 @{item['verkaeufer']}")
+                        if item["verkaeufer"] != st.session_state.username:
                             if st.button("💬 Verkäufer anschreiben",
                                           key=f"msg_{item['id']}"):
-                                ck = "__".join(sorted([st.session_state.username,item["verkäufer"]]))
+                                ck = "__".join(sorted([st.session_state.username,item["verkaeufer"]]))
                                 if ck not in chats: chats[ck]=[]
                                 chats[ck].append(dict(
                                     von=st.session_state.username,
@@ -957,14 +997,14 @@ elif st.session_state.page == "marketplace":
                     <b>{item['titel']}</b> <span class='kl-tag'>{item['kategorie']}</span><br>
                     <span class='kl-muted'>{item['beschreibung'][:80]}...</span><br>
                     <span class='kl-price'>💶 {item['preis']} €</span>
-                    <span class='kl-muted'> · @{item['verkäufer']}</span>
+                    <span class='kl-muted'> · @{item['verkaeufer']}</span>
                 </div>
                 """, unsafe_allow_html=True)
 
     with sub[2]:
         st.markdown("<div class='kl-section-title'>📦 Verkaufen</div>",
                     unsafe_allow_html=True)
-        my_items=[i for i in market if i["verkäufer"]==st.session_state.username]
+        my_items=[i for i in market if i["verkaeufer"]==st.session_state.username]
         if my_items:
             st.markdown("**Meine Angebote:**")
             for item in my_items:
@@ -976,23 +1016,23 @@ elif st.session_state.page == "marketplace":
         with st.form("sell"):
             s1,s2 = st.columns(2)
             with s1:
-                st   = st.text_input("Titel")
+                sell_titel = st.text_input("Titel", placeholder="z.B. Acryl auf Leinwand")
                 skat = st.selectbox("Kategorie",
                                     ["Gemälde","Fotografie","Skulptur","Digital Art","Textil","Sonstiges"])
                 sp   = st.number_input("Preis (€)",1,99999,100)
                 smat = st.text_input("Material (optional)")
-                sgr  = st.text_input("Größe (optional)")
+                sgr  = st.text_input("Groesse (optional)")
             with s2:
                 sbild = st.file_uploader("📸 Bild",type=["jpg","jpeg","png"])
                 sdesc = st.text_area("Beschreibung")
                 ski   = st.checkbox("✨ KI-Beschreibung generieren")
             sbtn = st.form_submit_button("📦 Einstellen", use_container_width=True)
 
-        if sbtn and st.strip():
+        if sbtn and sell_titel.strip():
             beschr = sdesc.strip()
             if ski and API_VERFUEGBAR and GROQ_API_KEY:
                 with st.spinner("🤖 KI schreibt Beschreibung..."):
-                    beschr = ki_kunstwerk_beschreibung(st, skat, smat, sgr) or beschr
+                    beschr = ki_kunstwerk_beschreibung(sell_titel, skat, smat, sgr) or beschr
             bp = None
             if sbild:
                 fn = f"{uuid.uuid4()}.{sbild.name.split('.')[-1]}"
@@ -1105,7 +1145,7 @@ elif st.session_state.page in ["konto","admin"]:
         market = load_json(MARKET_FILE, DEMO_MARKET)
         c1,c2,c3 = st.columns(3)
         c1.metric("📝 Posts",   len([p for p in posts  if p["autor"]==st.session_state.username]))
-        c2.metric("🛍️ Artikel", len([m for m in market if m["verkäufer"]==st.session_state.username]))
+        c2.metric("🛍️ Artikel", len([m for m in market if m["verkaeufer"]==st.session_state.username]))
         c3.metric("⭐ Favoriten",len(load_json(FAVORITES_FILE,{}).get(st.session_state.username,[])))
 
     st.markdown("---")
@@ -1121,5 +1161,5 @@ elif st.session_state.page in ["konto","admin"]:
 
 st.markdown("<br><hr>", unsafe_allow_html=True)
 st.markdown("""<div style='text-align:center;color:#aaa;font-size:.78rem'>
-kultur· · Powered by OpenStreetMap 🗺️ · Ticketmaster 🎭 · Groq/LLaMA 🤖 · v2.1
+Kulturview · Powered by OpenStreetMap 🗺️ · Ticketmaster 🎭 · Groq/LLaMA 🤖 · v2.1
 </div>""", unsafe_allow_html=True)
